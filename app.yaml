@@ -1,0 +1,16 @@
+runtime: nodejs16
+instance_class: F2
+
+env_variables:
+  GOOGLE_APPLICATION_CREDENTIALS_SECRET: "projects/cloudvisionapi-456009/secrets/google-cloud-service-account-key/versions/latest"
+
+handlers:
+  - url: /api/.*
+    script: auto
+
+  # Serve React build in production
+  - url: /static
+    static_dir: client/build/static/
+  - url: /(.*)
+    static_files: client/build/\1
+    upload: client/build/(.*)
