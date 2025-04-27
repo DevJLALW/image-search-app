@@ -1,0 +1,46 @@
+name: Deploy to Google App Engine
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code from the repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Google Cloud SDK
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '357.0.0'
+          project_id: ${{ secrets.GCP_PROJECT_ID }}  # Your Google Cloud Project ID stored in secrets
+
+      # Step 3: Authenticate with Google Cloud
+      - name: Authenticate with Google Cloud
+        run: |
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > "${HOME}/gcloud-key.json"  # Write the key to a file
+          gcloud auth activate-service-account --key-file="${HOME}/gcloud-key.json"  # Use the key to authenticate
+
+      # Step 4: Install dependencies for client (frontend) and backend (server)
+      - name: Install dependencies and build frontend
+        run: |
+          cd client
+          npm install
+          npm run build  # This will build the static files for the frontend
+
+      # Step 5: Install dependencies for backend (server)
+      - name: Install dependencies for backend
+        run: |
+          cd ../server
+          npm install
+
+      # Step 6: Deploy to App Engine
+      - name: Deploy to Google App Engine
+        run: |
+          gcloud app deploy server/app.yaml --quiet
