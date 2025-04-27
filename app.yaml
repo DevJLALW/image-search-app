@@ -6,7 +6,7 @@ entrypoint: node server.js
 
 handlers:
   - url: /static
-    static_dir: ../client/build/static
+    static_dir: client/build/static
 
   - url: /.*
     script: auto
