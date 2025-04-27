@@ -2,7 +2,7 @@ runtime: nodejs18
 env: standard
 instance_class: F1
 
-entrypoint: node server.js
+entrypoint: node server/server.js
 
 handlers:
   - url: /static
