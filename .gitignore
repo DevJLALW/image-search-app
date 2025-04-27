@@ -1,2 +1,5 @@
-/server/node_modules
-/client/node_modules
+client/build/
+client/node_modules/
+server/node_modules/
+uploads/
+/node_modules

@@ -1,78 +1,88 @@
-const express = require('express');
-const multer = require('multer');
+// server.js
+
+require('dotenv').config(); // Load environment variables from .env file
+
+const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
-const cors = require('cors');
-const { ImageAnnotatorClient } = require('@google-cloud/vision');
-const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
-
+const multer = require('multer');
+const express = require('express');
+const { google } = require('googleapis'); // For OAuth2 and token generation
 const app = express();
+
+// Upload setup
 const upload = multer({ dest: 'uploads/' });
-const secretClient = new SecretManagerServiceClient();
 
-
-
-let client; // Vision API client
-
-async function initializeVisionClient() {
-  const secretName = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-
-  if (secretName) {
-    // Running on App Engine — fetch from Secret Manager
-    const secretClient = new SecretManagerServiceClient();
-    const [version] = await secretClient.accessSecretVersion({ name: secretName });
-    const credentials = JSON.parse(version.payload.data.toString('utf8'));
-
-    client = new ImageAnnotatorClient({ credentials });
-    console.log('✅ Vision client initialized with Secret Manager');
-  } else {
-    // Running locally — use keyFilename
-    client = new ImageAnnotatorClient({
-      keyFilename: 'C:\\Users\\Jyoti_Len\\Documents\\Notes\\ACS\\cloudvisionapi-456009-91e71bc3fea8.json',
-    });
-    console.log('✅ Vision client initialized with local key file');
-  }
+// Function to encode image to base64
+function encodeImageToBase64(imagePath) {
+  const imageBuffer = fs.readFileSync(imagePath);
+  return imageBuffer.toString('base64');
 }
 
-app.use(cors());
+// Function to get the Google API OAuth2 token
+async function getAccessToken() {
+  const auth = new google.auth.GoogleAuth({
+    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,  // Path to your service account key
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  });
+
+  const authClient = await auth.getClient();
+  const accessToken = await authClient.getAccessToken();
+  return accessToken.token;
+}
 
 // POST endpoint for image detection
 app.post('/api/detect', upload.single('image'), async (req, res) => {
-    try {
+  try {
+    const filePath = req.file.path;
+    console.log('File uploaded:', filePath);
 
-      if (!client) await initializeVisionClient();
-      
-      const filePath = req.file.path;
-      console.log('File uploaded:', filePath);
-  
-      const content = fs.readFileSync(filePath);
-  
-      const [result] = await client.objectLocalization({
-        image: { content },
-      });
-  
-      console.log('Google Vision API result:', result);
-  
-      const objects = result.localizedObjectAnnotations.map(obj => ({
-        name: obj.name,
-        score: obj.score,
-        boundingPoly: obj.boundingPoly.normalizedVertices,
-      }));
-  
-      fs.unlinkSync(filePath); // Clean up
-      res.json(objects);
-    } catch (err) {
-      console.error('Detection error:', err);
-      res.status(500).json({ error: 'Detection failed', message: err.message });
-    }
-  });  
+    // Encode image to base64
+    const base64Image = encodeImageToBase64(filePath);
 
-// Serve React build in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build/index.html'));
-  });
-}
+    // Prepare the request payload for Google Vision API
+    const requestPayload = {
+      requests: [
+        {
+          image: { content: base64Image },
+          features: [
+            {
+              type: 'OBJECT_LOCALIZATION',
+              maxResults: 10,
+            },
+          ],
+        },
+      ],
+    };
 
+    // Get the OAuth2 access token dynamically
+    const accessToken = await getAccessToken();
+
+    // Call the Vision API using Axios
+    const visionAPIUrl = 'https://vision.googleapis.com/v1/images:annotate';
+    const response = await axios.post(visionAPIUrl, requestPayload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+
+    // Print the full response JSON in the terminal
+    //console.log('Full JSON response from Vision API:', JSON.stringify(response.data, null, 2));
+
+    // Process and send back the detected objects
+    const objects = response.data.responses[0].localizedObjectAnnotations.map(obj => ({
+      name: obj.name,
+      score: obj.score,
+      boundingPoly: obj.boundingPoly.normalizedVertices,
+    }));
+
+    fs.unlinkSync(filePath); // Clean up the uploaded file
+    res.json(objects); // Send the result back to the client
+  } catch (err) {
+    console.error('Error during image processing:', err);
+    res.status(500).json({ error: 'Detection failed', message: err.message });
+  }
+});
+
+// Export the app object so it can be used in other files
 module.exports = app;
