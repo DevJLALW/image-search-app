@@ -3,3 +3,5 @@ client/node_modules/
 server/node_modules/
 uploads/
 /node_modules
+.env
+*.json

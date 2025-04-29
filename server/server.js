@@ -1,37 +1,38 @@
 // server.js
 
-require('dotenv').config(); // Load environment variables from .env file
-
+require('dotenv').config();
+const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const multer = require('multer');
-const express = require('express');
-const { google } = require('googleapis'); // For OAuth2 and token generation
-const app = express();
+const { google } = require('googleapis');
+const { PredictionServiceClient } = require('@google-cloud/aiplatform').v1;
+// Make sure this import is correct for your package version
+const { Value } = require('google-protobuf/google/protobuf/struct_pb');
+// If the above Value import causes issues, try:
+// const { Value } = require('@google-cloud/aiplatform').protos.google.protobuf;
 
-// Upload setup
+const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-// Function to encode image to base64
 function encodeImageToBase64(imagePath) {
-  const imageBuffer = fs.readFileSync(imagePath);
-  return imageBuffer.toString('base64');
+    const imageBuffer = fs.readFileSync(imagePath);
+    return imageBuffer.toString('base64');
 }
 
-// Function to get the Google API OAuth2 token
 async function getAccessToken() {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,  // Path to your service account key
-    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-  });
-
-  const authClient = await auth.getClient();
-  const accessToken = await authClient.getAccessToken();
-  return accessToken.token;
+    const auth = new google.auth.GoogleAuth({
+        keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    const authClient = await auth.getClient();
+    const accessToken = await authClient.getAccessToken();
+    return accessToken.token;
 }
 
+// ✨ 1. Existing Vision API detection (Keep as is, assuming it works)
 // POST endpoint for image detection
-app.post('/api/detect', upload.single('image'), async (req, res) => {
+app.post('/api/detect-vision', upload.single('image'), async (req, res) => {
   try {
     const filePath = req.file.path;
     console.log('File uploaded:', filePath);
@@ -84,5 +85,166 @@ app.post('/api/detect', upload.single('image'), async (req, res) => {
   }
 });
 
-// Export the app object so it can be used in other files
+
+// ✨ 2. NEW: Vertex AI detection (AutoML Image Object Detection focus)
+
+// Ensure the API endpoint matches the region
+const projectId = process.env.VERTEX_PROJECT_ID;
+const endpointId = process.env.VERTEX_ENDPOINT_ID;
+const location = process.env.VERTEX_LOCATION || 'us-central1';
+
+const confidenceThreshold = 0.5;
+const maxPredictions = 10;
+
+app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
+    let filePath = null;
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file uploaded.' });
+        }
+        filePath = req.file.path;
+        console.log(`Vertex AI (REST): Processing file ${filePath}`);
+        console.log(`Vertex AI (REST): File MIME type: ${req.file.mimetype}`); // Log MIME type
+
+        const base64Image = encodeImageToBase64(filePath);
+
+        // --- Construct REST API Request ---
+        const restApiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/endpoints/${endpointId}:predict`;
+
+        const requestPayload = {
+            instances: [
+                {
+                    // Standard REST format for AutoML Image Object Detection
+                    content: base64Image,
+                    // Optional: Add mime_type if you suspect it's needed,
+                    // otherwise the API usually infers it. Use the type from multer.
+                    // mime_type: req.file.mimetype
+                }
+            ],
+            parameters: {
+                confidenceThreshold: confidenceThreshold,
+                maxPredictions: maxPredictions,
+            }
+        };
+
+        console.log('Vertex AI (REST): API URL:', restApiUrl);
+        // Avoid logging the full base64 string in production
+        // console.log('Vertex AI (REST): Request Payload:', JSON.stringify(requestPayload, null, 2));
+
+        // Get access token
+        const accessToken = await getAccessToken();
+
+        console.log('Vertex AI (REST): Making prediction request via Axios...');
+
+        // --- Make REST API Call ---
+        const response = await axios.post(restApiUrl, requestPayload, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+             // Optional: Increase timeout if requests are large/slow
+             // timeout: 60000 // 60 seconds
+        });
+
+        console.log('Vertex AI (REST): Raw Prediction response status:', response.status);
+        console.log('Vertex AI (REST): Raw Prediction response data:', JSON.stringify(response.data, null, 2));
+
+        // --- Response Parsing (REST API format) ---
+        // REST API typically returns JSON directly matching the structure below
+        if (!response.data || !response.data.predictions || !Array.isArray(response.data.predictions)) {
+             console.log('Vertex AI (REST): No predictions array found in the response data.');
+             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+             return res.json([]);
+        }
+
+        const objects = response.data.predictions.map(predictionFields => {
+            // Directly access fields from the JSON object
+             if (!predictionFields || typeof predictionFields !== 'object') {
+                console.warn('Vertex AI (REST): Skipping prediction with unexpected structure:', predictionFields);
+                return null;
+             }
+
+            const displayNames = predictionFields.displayNames || [];
+            const confidences = predictionFields.confidences || [];
+            const bboxes = predictionFields.bboxes || []; // Array of [xmin, xmax, ymin, ymax] arrays
+
+            if (displayNames.length !== confidences.length || displayNames.length !== bboxes.length) {
+                console.warn("Vertex AI (REST): Prediction array length mismatch", {
+                    names: displayNames.length, scores: confidences.length, boxes: bboxes.length,
+                    prediction: predictionFields
+                });
+                 return []; // Skip predictions for this image if mismatch
+            }
+
+            return displayNames.map((name, idx) => {
+                const bbox = bboxes[idx];
+                if (!Array.isArray(bbox) || bbox.length < 4 || bbox.some(isNaN)) {
+                   console.warn(`Vertex AI (REST): Invalid bbox data for prediction ${idx}:`, bbox);
+                   return null;
+                }
+                const normalizedVertices = [
+                    { x: bbox[0], y: bbox[2] }, { x: bbox[1], y: bbox[2] },
+                    { x: bbox[1], y: bbox[3] }, { x: bbox[0], y: bbox[3] },
+                ];
+                return { name: name, score: confidences[idx], boundingPoly: normalizedVertices };
+            });
+        }).flat().filter(obj => obj !== null);
+
+        // Clean up
+        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        console.log(`Vertex AI (REST): Successfully processed ${filePath}, found ${objects.length} objects.`);
+        res.json(objects);
+
+    } catch (err) {
+        console.error('❌ Error during Vertex AI (REST) detection:');
+        // Axios errors have response data in err.response
+        if (err.response) {
+            console.error('Status:', err.response.status);
+            console.error('Headers:', JSON.stringify(err.response.headers, null, 2));
+            console.error('Data:', JSON.stringify(err.response.data, null, 2)); // <<< This might contain the actual error message
+             // Extract code and details if available in the error response data
+             const errData = err.response.data?.error || {};
+             res.status(err.response.status || 500).json({
+                 error: 'Vertex AI REST detection failed',
+                 message: errData.message || err.message, // Use detailed message if available
+                 code: errData.code, // gRPC code equivalent (e.g., 400 for INVALID_ARGUMENT)
+                 details: errData.details || 'No details provided in REST error',
+             });
+        } else {
+            // Network error or error setting up the request
+            console.error('Error Message:', err.message);
+            console.error('Full Error:', err);
+            res.status(500).json({
+                 error: 'Vertex AI REST detection failed',
+                 message: err.message,
+                 code: err.code, // Might be undefined for non-response errors
+                 details: 'Error occurred before receiving a response'
+             });
+        }
+
+        // Cleanup on error
+        if (filePath && fs.existsSync(filePath)) {
+            try { fs.unlinkSync(filePath); } catch (e) { console.error("Error deleting file on error:", e); }
+        }
+    }
+});
+
+
+// ✨ 3. NEW: Gemini API placeholder (Keep as is)
+// app.post('/api/detect-gemini', /* ... */);
+
+
+// Start server if run directly (optional)
+if (require.main === module) {
+    const PORT = process.env.PORT || 3001;
+    app.listen(PORT, () => {
+        console.log(`Server listening on port ${PORT}`);
+        console.log("Using Google Credentials from:", process.env.GOOGLE_APPLICATION_CREDENTIALS);
+        console.log("Vertex Project ID:", process.env.VERTEX_PROJECT_ID);
+        console.log("Vertex Location:", location);
+        console.log("Vertex Endpoint ID:", process.env.VERTEX_ENDPOINT_ID);
+        console.log("Vertex API Endpoint:", vertexApiEndpoint);
+    });
+}
+
 module.exports = app;
