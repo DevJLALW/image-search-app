@@ -1,105 +1,149 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import './App.css';
+
+const MODEL_TABS = ['vision', 'vertex', 'gemini'];
 
 function App() {
   const [image, setImage] = useState(null);
-  const [previewURL, setPreviewURL] = useState(null);
-  const [results, setResults] = useState({
-    vision: [],
-    vertex: [],
-    gemini: []
-  });
+  const [preview, setPreview] = useState(null);
+  const [results, setResults] = useState({});
+  const [selectedModel, setSelectedModel] = useState('vision');
+  const [loading, setLoading] = useState(false);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setImage(file);
-      setPreviewURL(URL.createObjectURL(file));
-      setResults({ vision: [], vertex: [], gemini: [] }); // Clear previous results
-    }
+    setImage(file);
+    setPreview(URL.createObjectURL(file));
+    setResults({});
   };
 
-  const analyzeAll = async () => {
-    if (!image) {
-      alert("Please select an image first.");
-      return;
-    }
+  const handleCompare = async () => {
+    if (!image) return;
+    setLoading(true);
 
-    const apiRoutes = {
+    const formData = new FormData();
+    formData.append('image', image);
+
+    const endpoints = {
       vision: '/api/detect-vision',
       vertex: '/api/detect-vertex',
       gemini: '/api/detect-gemini',
     };
 
-    const fetchResults = async (route) => {
-      const fd = new FormData();
-      fd.append('image', image);
-      try {
-        const res = await fetch(route, {
-          method: 'POST',
-          body: fd,
+    try {
+      const newResults = {};
+      for (const model of MODEL_TABS) {
+        const response = await axios.post(endpoints[model], formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
-        if (!res.ok) throw new Error(`Error from ${route}`);
-        return await res.json();
-      } catch (err) {
-        console.error(`Error from ${route}:`, err);
-        return [{ name: "Error", score: 0, error: true }];
+        newResults[model] = response.data;
       }
-    };
-
-    const [visionRes, vertexRes, geminiRes] = await Promise.all([
-      fetchResults(apiRoutes.vision),
-      fetchResults(apiRoutes.vertex),
-      fetchResults(apiRoutes.gemini),
-    ]);
-
-    setResults({
-      vision: visionRes,
-      vertex: vertexRes,
-      gemini: geminiRes.predictions || geminiRes,
-    });
+      setResults(newResults);
+    } catch (err) {
+      console.error('Error:', err);
+      alert('Error during detection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const renderResultList = (title, objects) => (
-    <div className="result-box">
-      <h2>{title}</h2>
-      {objects.length === 0 ? (
-        <p>No results</p>
-      ) : (
-        <ul>
-          {objects.map((obj, idx) => (
-            <li key={idx}>
-              {obj.name || obj.displayNames?.[0] || 'Unknown'} —{" "}
-              {((obj.score || obj.confidences?.[0] || 0) * 100).toFixed(2)}%
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  const renderBoxes = (objects) => {
+    if (!objects || !preview) return null;
+
+    return (
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <img src={preview} alt="Uploaded" style={{ maxWidth: '100%' }} />
+        {objects.map((obj, idx) => {
+          const x = obj.boundingPoly[0].x * 100;
+          const y = obj.boundingPoly[0].y * 100;
+          const width = (obj.boundingPoly[1].x - obj.boundingPoly[0].x) * 100;
+          const height = (obj.boundingPoly[2].y - obj.boundingPoly[0].y) * 100;
+
+          return (
+            <div
+              key={idx}
+              style={{
+                position: 'absolute',
+                left: `${x}%`,
+                top: `${y}%`,
+                width: `${width}%`,
+                height: `${height}%`,
+                border: '2px solid red',
+                color: 'red',
+                fontSize: '12px',
+                backgroundColor: 'rgba(255, 0, 0, 0.2)',
+              }}
+            >
+              {obj.name} ({(obj.score * 100).toFixed(1)}%)
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderTabContent = () => {
+    const objects = results[selectedModel];
+    return (
+      <div style={{ textAlign: 'center' }}>
+        {renderBoxes(objects)}
+        {objects && objects.length > 0 && (
+          <div style={{ textAlign: 'left', marginTop: '1rem', maxWidth: '600px', margin: '1rem auto' }}>
+            <h4>Detected Objects:</h4>
+            <ul>
+              {objects.map((obj, idx) => (
+                <li key={idx}>
+                  <strong>{obj.name}</strong> – Confidence: {(obj.score * 100).toFixed(1)}%
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="App">
-      <h1>Object Detection Comparison</h1>
-      <input type="file" accept="image/*" onChange={handleImageChange} />
-      <br />
-      {previewURL && (
-        <div style={{ marginTop: '1rem' }}>
-          <h3>Image Preview:</h3>
-          <img
-            src={previewURL}
-            alt="Preview"
-            style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px' }}
-          />
+      <h2>Image Object Detection App</h2>
+      <div style={{ marginBottom: '1rem' }}>
+        <input type="file" accept="image/*" onChange={handleImageChange} />
+        <button onClick={handleCompare} disabled={!image || loading} style={{ marginLeft: '1rem' }}>
+          {loading ? 'Processing...' : 'Compare'}
+        </button>
+      </div>
+
+      {preview && (
+        <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+          <h4>Uploaded Image</h4>
+          <img src={preview} alt="Preview" style={{ maxHeight: '300px' }} />
         </div>
       )}
-      <button onClick={analyzeAll}>Analyze</button>
 
-      <div className="results-container">
-        {renderResultList('Vision API', results.vision)}
-        {renderResultList('Vertex AI', results.vertex)}
-        {renderResultList('Gemini API', results.gemini)}
-      </div>
+      {Object.keys(results).length > 0 && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            {MODEL_TABS.map((model) => (
+              <button
+                key={model}
+                onClick={() => setSelectedModel(model)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: selectedModel === model ? '#007bff' : '#e0e0e0',
+                  color: selectedModel === model ? 'white' : 'black',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                {model.charAt(0).toUpperCase() + model.slice(1)}
+              </button>
+            ))}
+          </div>
+          {renderTabContent()}
+        </div>
+      )}
     </div>
   );
 }
