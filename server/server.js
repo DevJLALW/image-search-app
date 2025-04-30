@@ -213,77 +213,110 @@ app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.post('/api/detect-gemini', upload.single('image'), async (req, res) => {
-    let filePath = null;
-  
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No image file uploaded.' });
-      }
-  
-      filePath = req.file.path;
-      const imageBuffer = fs.readFileSync(filePath);
-      const imageData = {
-        inlineData: {
-            data: imageBuffer.toString('base64'),
-            mimeType: req.file.mimetype || 'image/jpeg',
-        },
-    };
-  
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-  
-      const prompt = `List all objects in this image. For each object, include:
-  - Label (e.g., "person")
-  - Confidence score
-  - Normalized bounding box in the format [xmin, xmax, ymin, ymax]
-  
-  Respond with JSON in the following structure:
-  {
-    "predictions": [
-      {
-        "confidences": [ ... ],
-        "displayNames": [ ... ],
-        "bboxes": [ [xmin, xmax, ymin, ymax], ... ]
-      }
-    ]
-  }`;
-  
-  let result;
-  try {
-    result = await model.generateContent([{ text: prompt }, imageData]);
-  } catch (genErr) {
-    console.error("Error during generateContent:", genErr.response?.data || genErr.message || genErr);
-    throw new Error("Gemini generateContent failed");
-  }
-  
-  let responseText;
-  try {
-    responseText = result.response.text();
-    console.log("Raw Gemini response text:", responseText);
-  } catch (parseErr) {
-    console.error("Error extracting response text:", parseErr.message);
-    throw new Error("Failed to extract text from Gemini response");
-  }
-  
-  let jsonMatch;
-  try {
-    jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-  } catch (jsonErr) {
-    console.error("Regex match failed:", jsonErr.message);
-    throw new Error("Failed to parse JSON block from response");
-  }
+  let filePath = null;
 
-  res.json(JSON.parse(jsonMatch[0]));
-
-    } catch (err) {
-      console.error('Gemini detection error:', err.message);
-      res.status(500).json({ error: 'Gemini detection failed', message: err.message });
-    } finally {
-      if (filePath && fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file uploaded.' });
     }
-  });
+
+    filePath = req.file.path;
+    const imageBuffer = fs.readFileSync(filePath);
+    const imageData = {
+      inlineData: {
+        data: imageBuffer.toString('base64'),
+        mimeType: req.file.mimetype || 'image/jpeg',
+      },
+    };
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+    const prompt = `List all objects in this image. For each object, include:
+- Label (e.g., "person")
+- Confidence score
+- Normalized bounding box in the format [xmin, xmax, ymin, ymax]
+
+Respond with JSON in the following structure:
+{
+  "predictions": [
+    {
+      "confidences": [ ... ],
+      "displayNames": [ ... ],
+      "bboxes": [ [xmin, xmax, ymin, ymax], ... ]
+    }
+  ]
+}`;
+
+    let result;
+    try {
+      result = await model.generateContent([{ text: prompt }, imageData]);
+    } catch (genErr) {
+      console.error("Error during generateContent:", genErr.response?.data || genErr.message || genErr);
+      throw new Error("Gemini generateContent failed");
+    }
+
+    let responseText;
+    try {
+      responseText = result.response.text();
+      console.log("Raw Gemini response text:", responseText);
+    } catch (parseErr) {
+      console.error("Error extracting response text:", parseErr.message);
+      throw new Error("Failed to extract text from Gemini response");
+    }
+
+    let jsonMatch;
+    try {
+      jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON found");
+    } catch (jsonErr) {
+      console.error("Regex match failed:", jsonErr.message);
+      throw new Error("Failed to parse JSON block from response");
+    }
+
+    // Flatten Gemini response to match expected object format
+    const predictions = JSON.parse(jsonMatch[0]).predictions || [];
+
+    const objects = predictions.flatMap(prediction => {
+      const displayNames = prediction.displayNames || [];
+      const confidences = prediction.confidences || [];
+      const bboxes = prediction.bboxes || [];
+
+      if (
+        displayNames.length !== confidences.length ||
+        displayNames.length !== bboxes.length
+      ) {
+        console.warn('Gemini: Prediction array length mismatch:', { displayNames, confidences, bboxes });
+        return [];
+      }
+
+      return displayNames.map((name, idx) => {
+        const bbox = bboxes[idx];
+        const normalizedVertices = [
+          { x: bbox[0], y: bbox[2] },
+          { x: bbox[1], y: bbox[2] },
+          { x: bbox[1], y: bbox[3] },
+          { x: bbox[0], y: bbox[3] },
+        ];
+        return {
+          name,
+          score: confidences[idx],
+          boundingPoly: normalizedVertices,
+        };
+      });
+    });
+
+    res.json(objects);
+
+  } catch (err) {
+    console.error('Gemini detection error:', err.message);
+    res.status(500).json({ error: 'Gemini detection failed', message: err.message });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+});
+
 
 
 if (require.main === module) {
