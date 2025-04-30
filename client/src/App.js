@@ -1,150 +1,175 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import './App.css';
+// import React, { useState } from 'react';
+// import axios from 'axios';
+// import './App.css';
 
-const MODEL_TABS = ['vision', 'vertex', 'gemini'];
+// const MODEL_TABS = ['vision', 'vertex', 'gemini'];
+
+// function App() {
+//   const [image, setImage] = useState(null);
+//   const [preview, setPreview] = useState(null);
+//   const [results, setResults] = useState({});
+//   const [selectedModel, setSelectedModel] = useState('vision');
+//   const [loading, setLoading] = useState(false);
+
+//   const handleImageChange = (e) => {
+//     const file = e.target.files[0];
+//     setImage(file);
+//     setPreview(URL.createObjectURL(file));
+//     setResults({});
+//   };
+
+//   const handleCompare = async () => {
+//     if (!image) return;
+//     setLoading(true);
+
+//     const formData = new FormData();
+//     formData.append('image', image);
+
+//     const endpoints = {
+//       vision: '/api/detect-vision',
+//       vertex: '/api/detect-vertex',
+//       gemini: '/api/detect-gemini',
+//     };
+
+//     try {
+//       const newResults = {};
+//       for (const model of MODEL_TABS) {
+//         const response = await axios.post(endpoints[model], formData, {
+//           headers: { 'Content-Type': 'multipart/form-data' },
+//         });
+//         newResults[model] = response.data;
+//       }
+//       setResults(newResults);
+//     } catch (err) {
+//       console.error('Error:', err);
+//       alert('Error during detection.');
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   const renderBoxes = (objects) => {
+//     if (!objects || !preview) return null;
+
+//     return (
+//       <div style={{ position: 'relative', display: 'inline-block' }}>
+//         <img src={preview} alt="Uploaded" style={{ maxWidth: '100%' }} />
+//         {objects.map((obj, idx) => {
+//           const x = obj.boundingPoly[0].x * 100;
+//           const y = obj.boundingPoly[0].y * 100;
+//           const width = (obj.boundingPoly[1].x - obj.boundingPoly[0].x) * 100;
+//           const height = (obj.boundingPoly[2].y - obj.boundingPoly[0].y) * 100;
+
+//           return (
+//             <div
+//               key={idx}
+//               style={{
+//                 position: 'absolute',
+//                 left: `${x}%`,
+//                 top: `${y}%`,
+//                 width: `${width}%`,
+//                 height: `${height}%`,
+//                 border: '2px solid red',
+//                 color: 'red',
+//                 fontSize: '12px',
+//                 backgroundColor: 'rgba(255, 0, 0, 0.2)',
+//               }}
+//             >
+//               {obj.name} ({(obj.score * 100).toFixed(1)}%)
+//             </div>
+//           );
+//         })}
+//       </div>
+//     );
+//   };
+
+//   const renderTabContent = () => {
+//     const objects = results[selectedModel];
+//     return (
+//       <div style={{ textAlign: 'center' }}>
+//         {renderBoxes(objects)}
+//         {objects && objects.length > 0 && (
+//           <div style={{ textAlign: 'left', marginTop: '1rem', maxWidth: '600px', margin: '1rem auto' }}>
+//             <h4>Detected Objects:</h4>
+//             <ul>
+//               {objects.map((obj, idx) => (
+//                 <li key={idx}>
+//                   <strong>{obj.name}</strong> – Confidence: {(obj.score * 100).toFixed(1)}%
+//                 </li>
+//               ))}
+//             </ul>
+//           </div>
+//         )}
+//       </div>
+//     );
+//   };
+
+//   return (
+//     <div className="App">
+//       <h2>Image Object Detection App</h2>
+//       <div style={{ marginBottom: '1rem' }}>
+//         <input type="file" accept="image/*" onChange={handleImageChange} />
+//         <button onClick={handleCompare} disabled={!image || loading} style={{ marginLeft: '1rem' }}>
+//           {loading ? 'Processing...' : 'Compare'}
+//         </button>
+//       </div>
+
+//       {preview && (
+//         <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+//           <h4>Uploaded Image</h4>
+//           <img src={preview} alt="Preview" style={{ maxHeight: '300px' }} />
+//         </div>
+//       )}
+
+//       {Object.keys(results).length > 0 && (
+//         <div>
+//           <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+//             {MODEL_TABS.map((model) => (
+//               <button
+//                 key={model}
+//                 onClick={() => setSelectedModel(model)}
+//                 style={{
+//                   padding: '0.5rem 1rem',
+//                   backgroundColor: selectedModel === model ? '#007bff' : '#e0e0e0',
+//                   color: selectedModel === model ? 'white' : 'black',
+//                   border: 'none',
+//                   borderRadius: '4px',
+//                   cursor: 'pointer',
+//                 }}
+//               >
+//                 {model.charAt(0).toUpperCase() + model.slice(1)}
+//               </button>
+//             ))}
+//           </div>
+//           {renderTabContent()}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
+// export default App;
+
+// src/App.js
+
+import React from 'react';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import './App.css';
+import ObjectDetectionPage from './pages/ObjectDetectionPage';
+import ImageSearchPage from './pages/ImageSearchPage';
+import Navbar from './components/Navbar';  // Import the Navbar
 
 function App() {
-  const [image, setImage] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [results, setResults] = useState({});
-  const [selectedModel, setSelectedModel] = useState('vision');
-  const [loading, setLoading] = useState(false);
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    setImage(file);
-    setPreview(URL.createObjectURL(file));
-    setResults({});
-  };
-
-  const handleCompare = async () => {
-    if (!image) return;
-    setLoading(true);
-
-    const formData = new FormData();
-    formData.append('image', image);
-
-    const endpoints = {
-      vision: '/api/detect-vision',
-      vertex: '/api/detect-vertex',
-      gemini: '/api/detect-gemini',
-    };
-
-    try {
-      const newResults = {};
-      for (const model of MODEL_TABS) {
-        const response = await axios.post(endpoints[model], formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        newResults[model] = response.data;
-      }
-      setResults(newResults);
-    } catch (err) {
-      console.error('Error:', err);
-      alert('Error during detection.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderBoxes = (objects) => {
-    if (!objects || !preview) return null;
-
-    return (
-      <div style={{ position: 'relative', display: 'inline-block' }}>
-        <img src={preview} alt="Uploaded" style={{ maxWidth: '100%' }} />
-        {objects.map((obj, idx) => {
-          const x = obj.boundingPoly[0].x * 100;
-          const y = obj.boundingPoly[0].y * 100;
-          const width = (obj.boundingPoly[1].x - obj.boundingPoly[0].x) * 100;
-          const height = (obj.boundingPoly[2].y - obj.boundingPoly[0].y) * 100;
-
-          return (
-            <div
-              key={idx}
-              style={{
-                position: 'absolute',
-                left: `${x}%`,
-                top: `${y}%`,
-                width: `${width}%`,
-                height: `${height}%`,
-                border: '2px solid red',
-                color: 'red',
-                fontSize: '12px',
-                backgroundColor: 'rgba(255, 0, 0, 0.2)',
-              }}
-            >
-              {obj.name} ({(obj.score * 100).toFixed(1)}%)
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderTabContent = () => {
-    const objects = results[selectedModel];
-    return (
-      <div style={{ textAlign: 'center' }}>
-        {renderBoxes(objects)}
-        {objects && objects.length > 0 && (
-          <div style={{ textAlign: 'left', marginTop: '1rem', maxWidth: '600px', margin: '1rem auto' }}>
-            <h4>Detected Objects:</h4>
-            <ul>
-              {objects.map((obj, idx) => (
-                <li key={idx}>
-                  <strong>{obj.name}</strong> – Confidence: {(obj.score * 100).toFixed(1)}%
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
-    <div className="App">
-      <h2>Image Object Detection App</h2>
-      <div style={{ marginBottom: '1rem' }}>
-        <input type="file" accept="image/*" onChange={handleImageChange} />
-        <button onClick={handleCompare} disabled={!image || loading} style={{ marginLeft: '1rem' }}>
-          {loading ? 'Processing...' : 'Compare'}
-        </button>
+    <Router>
+      <div className="App">
+        <Navbar /> {/* Add the Navbar at the top */}
+        <Routes>
+          <Route path="/" element={<ObjectDetectionPage />} />
+          <Route path="/image-search" element={<ImageSearchPage />} />
+        </Routes>
       </div>
-
-      {preview && (
-        <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
-          <h4>Uploaded Image</h4>
-          <img src={preview} alt="Preview" style={{ maxHeight: '300px' }} />
-        </div>
-      )}
-
-      {Object.keys(results).length > 0 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            {MODEL_TABS.map((model) => (
-              <button
-                key={model}
-                onClick={() => setSelectedModel(model)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: selectedModel === model ? '#007bff' : '#e0e0e0',
-                  color: selectedModel === model ? 'white' : 'black',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                {model.charAt(0).toUpperCase() + model.slice(1)}
-              </button>
-            ))}
-          </div>
-          {renderTabContent()}
-        </div>
-      )}
-    </div>
+    </Router>
   );
 }
 

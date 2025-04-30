@@ -1,11 +1,10 @@
-/* General App styling */
 .App {
   text-align: center;
   font-family: Arial, sans-serif;
   padding: 20px;
 }
 
-/* Upload & Compare section */
+
 .controls {
   margin-bottom: 20px;
 }
@@ -28,7 +27,7 @@ button:hover {
   background-color: #0056b3;
 }
 
-/* Tabs */
+
 .tabs {
   display: flex;
   justify-content: center;
@@ -47,7 +46,7 @@ button:hover {
   font-weight: bold;
 }
 
-/* Image & bounding boxes */
+
 .image-container {
   position: relative;
   display: inline-block;
@@ -78,7 +77,7 @@ button:hover {
   border-radius: 4px;
 }
 
-/* Results layout */
+
 .results-container {
   display: flex;
   justify-content: space-around;

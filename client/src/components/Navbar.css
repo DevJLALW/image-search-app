@@ -1,0 +1,31 @@
+/* Navbar Styling */
+.navbar {
+    background-color: #282c34;
+    padding: 10px 0;
+    text-align: center;
+  }
+  
+  .navbar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .navbar li {
+    margin: 0 15px;
+  }
+  
+  .nav-link {
+    color: white;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: bold;
+    transition: color 0.3s;
+  }
+  
+  .nav-link:hover {
+    color: #007bff;
+  }
+  
