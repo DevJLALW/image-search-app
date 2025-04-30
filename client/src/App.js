@@ -3,6 +3,7 @@ import './App.css';
 
 function App() {
   const [image, setImage] = useState(null);
+  const [previewURL, setPreviewURL] = useState(null);
   const [results, setResults] = useState({
     vision: [],
     vertex: [],
@@ -10,8 +11,12 @@ function App() {
   });
 
   const handleImageChange = (e) => {
-    setImage(e.target.files[0]);
-    setResults({ vision: [], vertex: [], gemini: [] }); // Clear previous results
+    const file = e.target.files[0];
+    if (file) {
+      setImage(file);
+      setPreviewURL(URL.createObjectURL(file));
+      setResults({ vision: [], vertex: [], gemini: [] }); // Clear previous results
+    }
   };
 
   const analyzeAll = async () => {
@@ -25,9 +30,6 @@ function App() {
       vertex: '/api/detect-vertex',
       gemini: '/api/detect-gemini',
     };
-
-    const formData = new FormData();
-    formData.append('image', image);
 
     const fetchResults = async (route) => {
       const fd = new FormData();
@@ -67,8 +69,8 @@ function App() {
         <ul>
           {objects.map((obj, idx) => (
             <li key={idx}>
-              {obj.name || obj.displayNames?.[idx] || 'Unknown'} —{" "}
-              {((obj.score || obj.confidences?.[idx] || 0) * 100).toFixed(2)}%
+              {obj.name || obj.displayNames?.[0] || 'Unknown'} —{" "}
+              {((obj.score || obj.confidences?.[0] || 0) * 100).toFixed(2)}%
             </li>
           ))}
         </ul>
@@ -81,6 +83,16 @@ function App() {
       <h1>Object Detection Comparison</h1>
       <input type="file" accept="image/*" onChange={handleImageChange} />
       <br />
+      {previewURL && (
+        <div style={{ marginTop: '1rem' }}>
+          <h3>Image Preview:</h3>
+          <img
+            src={previewURL}
+            alt="Preview"
+            style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px' }}
+          />
+        </div>
+      )}
       <button onClick={analyzeAll}>Analyze</button>
 
       <div className="results-container">
