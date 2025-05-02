@@ -318,12 +318,62 @@ Respond with JSON in the following structure:
 });
 
 
+// Video Intelligence detection
 
-if (require.main === module) {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-        console.log(`Server listening on port ${PORT}`);
-    });
-}
+const { VideoIntelligenceServiceClient } = require('@google-cloud/video-intelligence');
+
+app.post('/api/detect-video', upload.single('video'), async (req, res) => {
+    let filePath = null;
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No video file uploaded.' });
+        }
+
+        filePath = req.file.path;
+        console.log('Video uploaded:', filePath);
+
+        const videoClient = new VideoIntelligenceServiceClient();
+
+        const inputContent = fs.readFileSync(filePath);
+        const request = {
+            inputContent: inputContent.toString('base64'),
+            features: ['LABEL_DETECTION'],
+        };
+
+        console.log('Video Intelligence: Annotating video...');
+        const [operation] = await videoClient.annotateVideo(request);
+        const [result] = await operation.promise();
+        console.log('Video Intelligence: Annotation complete.');
+
+        const segmentLabels = result.annotationResults[0].segmentLabelAnnotations;
+        const annotations = segmentLabels.map(label => ({
+            description: label.entity.description,
+            categoryDescriptions: label.categoryEntities.map(c => c.description),
+            segments: label.segments.map(segment => ({
+                startTime: Number(segment.segment.startTimeOffset?.seconds?.low ?? segment.segment.startTimeOffset?.seconds ?? 0),
+                endTime: Number(segment.segment.endTimeOffset?.seconds?.low ?? segment.segment.endTimeOffset?.seconds ?? 0),
+                confidence: Number(segment.confidence ?? 0),
+            })),
+        }));
+
+        res.json(annotations);
+    } catch (err) {
+        console.error('Video Intelligence error:', err);
+        res.status(500).json({ error: 'Video detection failed', message: err.message });
+    } finally {
+        if (filePath && fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath); // Clean up
+        }
+    }
+});
+
+
+
+// if (require.main === module) {
+//     const PORT = process.env.PORT || 3001;
+//     app.listen(PORT, () => {
+//         console.log(`Server listening on port ${PORT}`);
+//     });
+// }
 
 module.exports = app;

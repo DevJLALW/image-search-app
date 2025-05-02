@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import './App.css';
 import ObjectDetectionPage from './pages/ObjectDetectionPage';
 import ImageSearchPage from './pages/ImageSearchPage';
+import VideoDetectionPage from './pages/VideoDetectionPage';
 import Navbar from './components/Navbar';  // Import the Navbar
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ObjectDetectionPage />} />
           <Route path="/image-search" element={<ImageSearchPage />} />
+          <Route path="/video-detection" element={<VideoDetectionPage />} />
         </Routes>
       </div>
     </Router>
