@@ -3,12 +3,15 @@ import axios from 'axios';
 
 const VideoDetectionPage = () => {
   const [video, setVideo] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const handleVideoChange = (e) => {
-    setVideo(e.target.files[0]);
+    const file = e.target.files[0];
+    setVideo(file);
     setResults([]);
+    setVideoPreview(file ? URL.createObjectURL(file) : null);
   };
 
   const handleSubmit = async (e) => {
@@ -41,6 +44,13 @@ const VideoDetectionPage = () => {
           {loading ? 'Analyzing...' : 'Detect Video Objects'}
         </button>
       </form>
+
+      {videoPreview && (
+        <div className="my-4">
+          <h4>Video Preview:</h4>
+          <video src={videoPreview} controls width="400" />
+        </div>
+      )}
 
       {results.length > 0 && (
         <div>
