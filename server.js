@@ -14,7 +14,7 @@ const admin = require('firebase-admin');
 const Busboy = require('busboy');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 
 // const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
@@ -25,7 +25,7 @@ app.use(express.json());
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
-  storageBucket: 'test_img_upload_acs',  // Your Firebase Storage bucket name
+  storageBucket: process.env.GCS_BUCKET_NAME,  // Your Firebase Storage bucket name
 });
 
 
@@ -417,6 +417,87 @@ app.post('/api/save-to-firestore', async (req, res) => {
     res.status(500).json({ error: 'Error saving to Firestore', message: err.message });
   }
 });
+
+async function getImageUrlsByTag(tag) {
+  const snapshot = await db.collection("imagesearch").get();
+  const matchedUrls = [];
+
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    const { imageUrl, results } = data;
+
+    const allResults = [
+      ...(results?.gemini || []),
+      ...(results?.vertex || []),
+      ...(results?.vision || []),
+    ];
+
+    const tagFound = allResults.some(
+      (entry) => entry.name?.toLowerCase() === tag.toLowerCase()
+    );
+
+    if (tagFound && imageUrl) {
+      matchedUrls.push(imageUrl);
+    }
+  });
+
+  console.log(matchedUrls);
+  return matchedUrls;
+}
+
+// to add the helper function that returns the images that are stored in the gcs bucket urls. parameters: list of gcs urls, return: all the images stored in those urls
+async function fetchImagesFromUrls(urls) {
+  const results = [];
+
+  for (const url of urls) {
+    try {
+      let bucketName, filePath;
+
+      if (url.startsWith("gs://")) {
+        // Extract bucket and path from GCS URL
+        const match = url.match(/^gs:\/\/([^/]+)\/(.+)$/);
+        if (!match) continue;
+        bucketName = match[1];
+        filePath = match[2];
+      } else if (url.startsWith("https://storage.googleapis.com/")) {
+        // Extract bucket and path from public URL
+        const parts = url.replace("https://storage.googleapis.com/", "").split("/");
+        bucketName = parts.shift();
+        filePath = parts.join("/");
+      } else {
+        console.warn("Unsupported URL format:", url);
+        continue;
+      }
+
+      const file = admin.storage().bucket(bucketName).file(filePath);
+      const [buffer] = await file.download();
+
+      results.push({
+        url,
+        base64: buffer.toString("base64"),
+        mimeType: (await file.getMetadata())[0].contentType || "image/jpeg"
+      });
+
+    } catch (err) {
+      console.error(`Failed to fetch image from ${url}:`, err.message);
+    }
+  }
+
+  return results;
+}
+
+app.get('/api/images-by-tag/:tag', async (req, res) => {
+  try {
+    const tag = req.params.tag;
+    const urls = await getImageUrlsByTag(tag);
+    const images = await fetchImagesFromUrls(urls);
+    res.json(images);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve images', message: err.message });
+  }
+});
+
+
 
 // Serve React build folder
 app.use(express.static(path.join(__dirname, 'build')));
