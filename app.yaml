@@ -1,0 +1,15 @@
+runtime: nodejs20
+service: default
+entrypoint: node server.js
+
+handlers:
+
+  - url: /api/.*
+    script: auto
+    
+  - url: /static
+    static_dir: build/static
+
+  - url: /(.*)
+    static_files: build/index.html
+    upload: build/index.html
