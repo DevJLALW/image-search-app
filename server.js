@@ -9,6 +9,8 @@ const { google } = require('googleapis');
 const { PredictionServiceClient } = require('@google-cloud/aiplatform').v1;
 const { Value } = require('google-protobuf/google/protobuf/struct_pb');
 const { GoogleGenerativeAI} = require('@google/generative-ai');
+const path = require('path');
+const PORT = process.env.PORT || 8080;
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -319,11 +321,20 @@ Respond with JSON in the following structure:
 
 
 
-if (require.main === module) {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-        console.log(`Server listening on port ${PORT}`);
-    });
-}
+// if (require.main === module) {
+//     const PORT = process.env.PORT || 3001;
+//     app.listen(PORT, () => {
+//         console.log(`Server listening on port ${PORT}`);
+//     });
+// }
 
-module.exports = app;
+// Serve React build folder
+app.use(express.static(path.join(__dirname, 'build')));
+
+app.get(/(.*)/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
