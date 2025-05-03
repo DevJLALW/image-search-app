@@ -445,7 +445,6 @@ async function getImageUrlsByTag(tag) {
   return matchedUrls;
 }
 
-// to add the helper function that returns the images that are stored in the gcs bucket urls. parameters: list of gcs urls, return: all the images stored in those urls
 async function fetchImagesFromUrls(urls) {
   const results = [];
 
@@ -454,13 +453,11 @@ async function fetchImagesFromUrls(urls) {
       let bucketName, filePath;
 
       if (url.startsWith("gs://")) {
-        // Extract bucket and path from GCS URL
         const match = url.match(/^gs:\/\/([^/]+)\/(.+)$/);
         if (!match) continue;
         bucketName = match[1];
         filePath = match[2];
       } else if (url.startsWith("https://storage.googleapis.com/")) {
-        // Extract bucket and path from public URL
         const parts = url.replace("https://storage.googleapis.com/", "").split("/");
         bucketName = parts.shift();
         filePath = parts.join("/");
