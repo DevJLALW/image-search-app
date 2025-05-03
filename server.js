@@ -4,7 +4,6 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
-const multer = require('multer');
 const { google } = require('googleapis');
 const { PredictionServiceClient } = require('@google-cloud/aiplatform').v1;
 const { Value } = require('google-protobuf/google/protobuf/struct_pb');
@@ -36,7 +35,7 @@ const imagesearchRef = db.collection('imagesearch');
 
 async function getAccessToken() {
     const auth = new google.auth.GoogleAuth({
-        keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+       // keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     });
     const authClient = await auth.getClient();
@@ -240,7 +239,7 @@ app.post('/api/detect-vertex',  async (req, res) => {
         
         // Clean up
         // if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        console.log(`Vertex AI (REST): Successfully processed, found ${objects.length} objects.`);
+        //console.log(`Vertex AI (REST): Successfully processed, found ${objects.length} objects.`);
         res.json(objects);
         
     } catch (err) {
@@ -384,6 +383,40 @@ Respond with JSON in the following structure:
 //         console.log(`Server listening on port ${PORT}`);
 //     });
 // }
+
+
+
+app.post('/api/save-to-firestore', async (req, res) => {
+  const { imageUrl, results } = req.body;
+
+  try {
+    // Use add() to automatically create a new document with a unique ID
+    await imagesearchRef.add({
+      imageUrl: imageUrl,
+      results: {
+        vision: Array.isArray(results.vision) ? results.vision.map(item => ({
+          name: item.name,
+          score: item.score
+        })) : [],
+        vertex: Array.isArray(results.vertex) ? results.vertex.map(item => ({
+          name: item.name,
+          score: item.score
+        })) : [],
+        gemini: Array.isArray(results.gemini) ? results.gemini.map(item => ({
+          name: item.name,
+          score: item.score
+        })) : [],
+      },      
+      timestamp: admin.firestore.FieldValue.serverTimestamp(), // Optional timestamp
+    });
+
+    console.log('Successfully saved to Firestore');
+    res.status(200).json({ message: 'Data saved successfully' });
+  } catch (err) {
+    console.error('Error saving to Firestore:', err);
+    res.status(500).json({ error: 'Error saving to Firestore', message: err.message });
+  }
+});
 
 // Serve React build folder
 app.use(express.static(path.join(__dirname, 'build')));

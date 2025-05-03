@@ -4,12 +4,11 @@ import '../App.css';
 
 const MODEL_TABS = ['vision', 'vertex', 'gemini'];
 
-//const MODEL_TABS = ['vision'];
-
 function ObjectDetectionPage() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
   const [base64Image, setBase64Image] = useState(null);
+  const [imageURL, setimageURL] = useState(null);
   const [results, setResults] = useState({});
   const [selectedModel, setSelectedModel] = useState('vision');
   const [loading, setLoading] = useState(false);
@@ -35,6 +34,7 @@ function ObjectDetectionPage() {
 
       if (uploadRes.data?.base64Image) {
         setBase64Image(uploadRes.data.base64Image);
+        setimageURL(uploadRes.data.imageUrl); // Save the image URL for later use
       } else {
         alert('Image upload failed or base64 data missing.');
       }
@@ -66,6 +66,12 @@ function ObjectDetectionPage() {
         );
         newResults[model] = response.data;
       }
+
+      await axios.post('/api/save-to-firestore', {
+        imageUrl: imageURL,
+        results: newResults,
+      });
+
       setResults(newResults);
     } catch (err) {
       console.error('Detection Error:', err);
