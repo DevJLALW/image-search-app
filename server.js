@@ -12,15 +12,21 @@ const path = require('path');
 const PORT = process.env.PORT || 8080;
 const admin = require('firebase-admin');
 const Busboy = require('busboy');
+const os = require('os');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 
-// const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
 // admin.initializeApp({
 //    credential: admin.credential.cert(serviceAccount),
 //    storageBucket: 'test_img_upload_acs',  // This is your Firebase storage bucket
+// });
+
+// admin.initializeApp({
+//   credential: admin.credential.applicationDefault(),
+//   storageBucket: 'test_img_upload_acs',  // Your Firebase Storage bucket name
 // });
 
 admin.initializeApp({
@@ -35,7 +41,7 @@ const imagesearchRef = db.collection('imagesearch');
 
 async function getAccessToken() {
     const auth = new google.auth.GoogleAuth({
-       // keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     });
     const authClient = await auth.getClient();
@@ -383,6 +389,67 @@ Respond with JSON in the following structure:
 //         console.log(`Server listening on port ${PORT}`);
 //     });
 // }
+
+// Video Intelligence detection
+
+const { VideoIntelligenceServiceClient } = require('@google-cloud/video-intelligence');
+ 
+app.post('/api/detect-video', (req, res) => {
+  const busboy = Busboy({ headers: req.headers }); 
+
+  let tempFilePath = '';
+  let fileWriteStream;
+  //console.log('Video upload started...',filename);
+
+  busboy.on('file', (fieldname, file, info) => {
+    const { filename } = info;
+    tempFilePath = path.join(os.tmpdir(), filename);
+    fileWriteStream = fs.createWriteStream(tempFilePath);
+    file.pipe(fileWriteStream);
+  });  
+
+  busboy.on('finish', async () => {
+    try {
+      console.log('Video uploaded to:', tempFilePath);
+
+      const videoClient = new VideoIntelligenceServiceClient();
+      const inputContent = fs.readFileSync(tempFilePath);
+
+      const request = {
+        inputContent: inputContent.toString('base64'),
+        features: ['LABEL_DETECTION'],
+      };
+
+      console.log('Video Intelligence: Annotating...');
+      const [operation] = await videoClient.annotateVideo(request);
+      const [result] = await operation.promise();
+      console.log('Annotation complete.');
+
+      const segmentLabels = result.annotationResults[0].segmentLabelAnnotations;
+      const annotations = segmentLabels.map(label => ({
+        description: label.entity.description,
+        categoryDescriptions: label.categoryEntities.map(c => c.description),
+        segments: label.segments.map(segment => ({
+          startTime: Number(segment.segment.startTimeOffset?.seconds ?? 0),
+          endTime: Number(segment.segment.endTimeOffset?.seconds ?? 0),
+          confidence: Number(segment.confidence ?? 0),
+        })),
+      }));
+
+      res.json(annotations);
+    } catch (err) {
+      console.error('Video Intelligence error:', err);
+      res.status(500).json({ error: 'Video detection failed', message: err.message });
+    } finally {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath); // Clean up temp file
+      }
+    }
+  });
+
+  req.pipe(busboy);
+});
+
 
 
 

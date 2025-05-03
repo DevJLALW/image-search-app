@@ -12,6 +12,9 @@ function Navbar() {
         <li>
           <Link to="/image-search" className="nav-link">Image Search Engine</Link>
         </li>
+        <li>
+           <Link to="/video-detection" className="nav-link">Video Detection</Link>
+         </li>
       </ul>
     </nav>
   );
