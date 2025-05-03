@@ -11,14 +11,28 @@ const { Value } = require('google-protobuf/google/protobuf/struct_pb');
 const { GoogleGenerativeAI} = require('@google/generative-ai');
 const path = require('path');
 const PORT = process.env.PORT || 8080;
+const admin = require('firebase-admin');
+const Busboy = require('busboy');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+app.use(express.json());
 
-function encodeImageToBase64(imagePath) {
-    const imageBuffer = fs.readFileSync(imagePath);
-    return imageBuffer.toString('base64');
-}
+
+// const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+// admin.initializeApp({
+//    credential: admin.credential.cert(serviceAccount),
+//    storageBucket: 'test_img_upload_acs',  // This is your Firebase storage bucket
+// });
+
+admin.initializeApp({
+  credential: admin.credential.applicationDefault(),
+  storageBucket: 'test_img_upload_acs',  // Your Firebase Storage bucket name
+});
+
+
+const bucket = admin.storage().bucket();
+const db = admin.firestore(); 
+const imagesearchRef = db.collection('imagesearch');
 
 async function getAccessToken() {
     const auth = new google.auth.GoogleAuth({
@@ -30,14 +44,66 @@ async function getAccessToken() {
     return accessToken.token;
 }
 
+
+
+// API endpoint for image upload
+app.post('/api/upload', (req, res) => {
+  const busboy = Busboy({ headers: req.headers });
+
+  const { v4: uuidv4 } = require('uuid');
+
+  busboy.on('file', (fieldname, file, filename, encoding, mimetype) => {
+  const safeFilename = typeof filename === 'string' ? filename : `upload-${Date.now()}`;
+  const uniqueFilename = `${uuidv4()}-${safeFilename}`;
+  const filePath = `images/${uniqueFilename}`;
+
+    // Upload the file to Firebase Storage
+    const fileUpload = bucket.file(filePath).createWriteStream({
+      metadata: {
+        contentType: mimetype,
+      },
+    });
+
+    file.pipe(fileUpload);
+
+    fileUpload.on('finish', async () => {
+      console.log('File uploaded to Cloud Storage:', filePath);
+      const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+
+            // Now, process the image with Google Vision API
+            try {
+
+              const [fileBuffer] = await bucket.file(filePath).download();  // ✅ Download from cloud
+              const base64Image = fileBuffer.toString('base64');
+              
+              // Respond with both base64 image and the URL
+              res.json({ base64Image, imageUrl });
+                } 
+            catch (err) {
+              console.error('Error during file processing:', err);
+              res.status(500).json({ error: 'File processing failed', message: err.message });
+            } 
+    });
+
+    fileUpload.on('error', (err) => {
+      console.error('Error during file upload:', err);
+      res.status(500).json({ error: 'File upload failed', message: err.message });
+    });
+  });
+
+  req.pipe(busboy);
+});
+
+
 // Vision API detection
-app.post('/api/detect-vision', upload.single('image'), async (req, res) => {
+app.post('/api/detect-vision', async (req, res) => {
     try {
-        const filePath = req.file.path;
-        console.log('File uploaded:', filePath);
-        
-        // Encode image to base64
-        const base64Image = encodeImageToBase64(filePath);
+      
+        const { base64Image } = req.body;
+  
+        if (!base64Image) {
+          return res.status(400).json({ error: 'Base64 image is required' });
+        }
         
         // Prepare the request payload for Google Vision API
         const requestPayload = {
@@ -76,7 +142,7 @@ app.post('/api/detect-vision', upload.single('image'), async (req, res) => {
             boundingPoly: obj.boundingPoly.normalizedVertices,
         }));
         
-        fs.unlinkSync(filePath); // Clean up the uploaded file
+        //fs.unlinkSync(filePath); // Clean up the uploaded file
         res.json(objects); // Send the result back to the client
     } catch (err) {
         console.error('Error during image processing:', err);
@@ -94,17 +160,14 @@ const location = process.env.VERTEX_LOCATION || 'us-central1';
 const confidenceThreshold = 0.5;
 const maxPredictions = 10;
 
-app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
-    let filePath = null;
+app.post('/api/detect-vertex',  async (req, res) => {
+    //let filePath = null;
     try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No image file uploaded.' });
+        const { base64Image } = req.body;
+  
+        if (!base64Image) {
+          return res.status(400).json({ error: 'Base64 image is required' });
         }
-        filePath = req.file.path;
-        console.log(`Vertex AI (REST): Processing file ${filePath}`);
-        console.log(`Vertex AI (REST): File MIME type: ${req.file.mimetype}`); // Log MIME type
-        
-        const base64Image = encodeImageToBase64(filePath);
         
         const restApiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/endpoints/${endpointId}:predict`;
         
@@ -139,7 +202,7 @@ app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
         
         if (!response.data || !response.data.predictions || !Array.isArray(response.data.predictions)) {
             console.log('Vertex AI (REST): No predictions array found in the response data.');
-            if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            // if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
             return res.json([]);
         }
         
@@ -176,8 +239,8 @@ app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
         }).flat().filter(obj => obj !== null);
         
         // Clean up
-        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        console.log(`Vertex AI (REST): Successfully processed ${filePath}, found ${objects.length} objects.`);
+        // if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        console.log(`Vertex AI (REST): Successfully processed, found ${objects.length} objects.`);
         res.json(objects);
         
     } catch (err) {
@@ -204,9 +267,9 @@ app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
             });
         }
         
-        if (filePath && fs.existsSync(filePath)) {
-            try { fs.unlinkSync(filePath); } catch (e) { console.error("Error deleting file on error:", e); }
-        }
+        // if (filePath && fs.existsSync(filePath)) {
+        //     try { fs.unlinkSync(filePath); } catch (e) { console.error("Error deleting file on error:", e); }
+        // }
     }
 });
 
@@ -214,22 +277,20 @@ app.post('/api/detect-vertex', upload.single('image'), async (req, res) => {
 // Gemini API - Multimodal Image + Prompt
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-app.post('/api/detect-gemini', upload.single('image'), async (req, res) => {
-  let filePath = null;
+app.post('/api/detect-gemini',  async (req, res) => {
 
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No image file uploaded.' });
+    const { base64Image } = req.body;
+    if (!base64Image) {
+      return res.status(400).json({ error: 'Base64 image is required.' });
     }
-
-    filePath = req.file.path;
-    const imageBuffer = fs.readFileSync(filePath);
     const imageData = {
       inlineData: {
-        data: imageBuffer.toString('base64'),
-        mimeType: req.file.mimetype || 'image/jpeg',
+        data: base64Image,
+        mimeType: 'image/jpeg',
       },
     };
+    
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
@@ -312,11 +373,7 @@ Respond with JSON in the following structure:
   } catch (err) {
     console.error('Gemini detection error:', err.message);
     res.status(500).json({ error: 'Gemini detection failed', message: err.message });
-  } finally {
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  }
+  } 
 });
 
 

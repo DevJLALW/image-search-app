@@ -4,26 +4,51 @@ import '../App.css';
 
 const MODEL_TABS = ['vision', 'vertex', 'gemini'];
 
+//const MODEL_TABS = ['vision'];
+
 function ObjectDetectionPage() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [base64Image, setBase64Image] = useState(null);
   const [results, setResults] = useState({});
   const [selectedModel, setSelectedModel] = useState('vision');
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     setImage(file);
     setPreview(URL.createObjectURL(file));
     setResults({});
+    setBase64Image(null);
+
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const uploadRes = await axios.post('/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (uploadRes.data?.base64Image) {
+        setBase64Image(uploadRes.data.base64Image);
+      } else {
+        alert('Image upload failed or base64 data missing.');
+      }
+    } catch (err) {
+      console.error('Upload Error:', err);
+      alert('Error uploading image.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleCompare = async () => {
-    if (!image) return;
+    if (!base64Image) return;
     setLoading(true);
-
-    const formData = new FormData();
-    formData.append('image', image);
 
     const endpoints = {
       vision: '/api/detect-vision',
@@ -34,14 +59,16 @@ function ObjectDetectionPage() {
     try {
       const newResults = {};
       for (const model of MODEL_TABS) {
-        const response = await axios.post(endpoints[model], formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const response = await axios.post(
+          endpoints[model],
+          { base64Image },
+          { headers: { 'Content-Type': 'application/json' } }
+        );
         newResults[model] = response.data;
       }
       setResults(newResults);
     } catch (err) {
-      console.error('Error:', err);
+      console.error('Detection Error:', err);
       alert('Error during detection.');
     } finally {
       setLoading(false);
@@ -94,7 +121,8 @@ function ObjectDetectionPage() {
             <ul>
               {objects.map((obj, idx) => (
                 <li key={idx}>
-                  <strong>{obj.name}</strong> – Confidence: {(obj.score * 100).toFixed(1)}%
+                  <strong>{obj.name}</strong> – Confidence:{' '}
+                  {(obj.score * 100).toFixed(1)}%
                 </li>
               ))}
             </ul>
@@ -109,8 +137,8 @@ function ObjectDetectionPage() {
       <h2>Image Object Detection App</h2>
       <div style={{ marginBottom: '1rem' }}>
         <input type="file" accept="image/*" onChange={handleImageChange} />
-        <button onClick={handleCompare} disabled={!image || loading} style={{ marginLeft: '1rem' }}>
-          {loading ? 'Processing...' : 'Compare'}
+        <button onClick={handleCompare} disabled={!base64Image || loading || uploading} style={{ marginLeft: '1rem' }}>
+          {loading ? 'Processing...' : uploading ? 'Uploading...' : 'Compare'}
         </button>
       </div>
 
