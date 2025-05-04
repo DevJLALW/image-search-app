@@ -1,15 +1,15 @@
-runtime: nodejs18
-env: standard
-instance_class: F1
-
-entrypoint: node server/server.js
+runtime: nodejs20
+service: default
+entrypoint: node server.js
 
 handlers:
-  - url: /static
-    static_dir: client/build/static
 
-  - url: /.*
+  - url: /api/.*
     script: auto
+    
+  - url: /static
+    static_dir: build/static
 
-env_variables:
-  NODE_ENV: 'production'
+  - url: /(.*)
+    static_files: build/index.html
+    upload: build/index.html

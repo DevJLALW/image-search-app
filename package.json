@@ -1,0 +1,56 @@
+{
+  "name": "image-search-app",
+  "version": "1.0.0",
+  "private": true,
+  "proxy": "http://localhost:8080",
+  "scripts": {
+    "start": "node server.js",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "@google-cloud/aiplatform": "^4.1.0",
+    "@google-cloud/secret-manager": "^6.0.1",
+    "@google-cloud/video-intelligence": "^6.0.1",
+    "@google-cloud/vision": "^5.1.0",
+    "@google/generative-ai": "^0.24.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.9.0",
+    "busboy": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.3.0",
+    "fs": "^0.0.1-security",
+    "google-protobuf": "^3.21.4",
+    "googleapis": "^148.0.0",
+    "multer": "^1.4.5-lts.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.5.3",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
