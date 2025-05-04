@@ -30,12 +30,11 @@ app.use(express.json({ limit: '10mb' }));
 const client = new SecretManagerServiceClient();
 
 async function accessSecret(secretName) {
-  const name = `projects/YOUR_PROJECT_ID/secrets/${secretName}/versions/latest`;
+  const name = `projects/629889543689/secrets/${secretName}/versions/latest`;
 
   try {
     const [version] = await client.accessSecretVersion({ name });
     const payload = version.payload.data.toString('utf8');
-    console.log(`Retrieved secret: ${payload}`);
     return payload;
   } catch (error) {
     console.error('Error accessing secret:', error);
@@ -44,15 +43,71 @@ async function accessSecret(secretName) {
 }
 
 
-admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
-  storageBucket: accessSecret('GCS_BUCKET_NAME'), 
-});
+let GCS_BUCKET_NAME, VERTEX_PROJECT_ID, VERTEX_ENDPOINT_ID, VERTEX_LOCATION, GEMINI_API_KEY;
+
+// admin.initializeApp({
+//   credential: admin.credential.applicationDefault(),
+//   storageBucket: GCS_BUCKET_NAME,
+// });
+
+async function initializeApp() {
+  console.log('Starting initialization...');
+  try {
+      console.log('Fetching secrets...');
+      [
+          GCS_BUCKET_NAME,
+          VERTEX_PROJECT_ID,
+          VERTEX_ENDPOINT_ID,
+          VERTEX_LOCATION,
+          GEMINI_API_KEY,
+      ] = await Promise.all([
+          accessSecret('GCS_BUCKET_NAME'),
+          accessSecret('VERTEX_PROJECT_ID'),
+          accessSecret('VERTEX_ENDPOINT_ID'),
+          accessSecret('VERTEX_LOCATION').catch(() => 'us-central1'), // Default location
+          accessSecret('GEMINI_API_KEY'),
+      ]);
+      console.log('Secrets fetched successfully.');
+
+      if (!GCS_BUCKET_NAME) {
+           throw new Error("GCS_BUCKET_NAME secret is missing or empty!");
+      }
+      if (!VERTEX_PROJECT_ID) {
+           throw new Error("VERTEX_PROJECT_ID secret is missing or empty!");
+      }
+      if (!VERTEX_ENDPOINT_ID) {
+           throw new Error("VERTEX_ENDPOINT_ID secret is missing or empty!");
+      }
+      if (!GEMINI_API_KEY) {
+          throw new Error("GEMINI_API_KEY secret is missing or empty!");
+      }
+
+      console.log('Initializing Firebase...');
+      admin.initializeApp({
+          credential: admin.credential.applicationDefault(),
+          storageBucket: GCS_BUCKET_NAME,
+      });
+      console.log('Firebase initialized successfully for GCS bucket');
+
+      bucket = admin.storage().bucket();
+      db = admin.firestore();
+      imagesearchRef = db.collection('imagesearch');
+      console.log('Firestore and Storage references created.');
+
+      console.log('Initialization complete.');
+
+  } catch (err) {
+      console.error('FATAL: Initialization failed:', err);
+      process.exit(1);
+  }
+}
 
 
-const bucket = admin.storage().bucket();
-const db = admin.firestore(); 
-const imagesearchRef = db.collection('imagesearch');
+// console.log('Firebase initialized with bucket:',GCS_BUCKET_NAME);
+
+// const bucket = admin.storage().bucket();
+// const db = admin.firestore(); 
+// const imagesearchRef = db.collection('imagesearch');
 
 async function getAccessToken() {
     const auth = new google.auth.GoogleAuth({
@@ -170,9 +225,9 @@ app.post('/api/detect-vision', async (req, res) => {
 
 // Vertex AI detection (AutoML Image Object Detection focus)
 
-const projectId = accessSecret('VERTEX_PROJECT_ID');
-const endpointId = accessSecret('VERTEX_ENDPOINT_ID');
-const location = accessSecret('VERTEX_LOCATION') || 'us-central1';
+const projectId = VERTEX_PROJECT_ID;
+const endpointId = VERTEX_ENDPOINT_ID;
+const location = VERTEX_LOCATION || 'us-central1';
 
 const confidenceThreshold = 0.5;
 const maxPredictions = 10;
@@ -186,7 +241,7 @@ app.post('/api/detect-vertex',  async (req, res) => {
           return res.status(400).json({ error: 'Base64 image is required' });
         }
         
-        const restApiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/endpoints/${endpointId}:predict`;
+        const restApiUrl = `https://${VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/${VERTEX_PROJECT_ID}/locations/${VERTEX_LOCATION}/endpoints/${VERTEX_ENDPOINT_ID}:predict`;
         
         const requestPayload = {
             instances: [
@@ -292,9 +347,11 @@ app.post('/api/detect-vertex',  async (req, res) => {
 
 
 // Gemini API - Multimodal Image + Prompt
-const genAI = new GoogleGenerativeAI(accessSecret('GEMINI_API_KEY'));
+
 
 app.post('/api/detect-gemini',  async (req, res) => {
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
   try {
     const { base64Image } = req.body;
@@ -573,6 +630,11 @@ app.get(/(.*)/, (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+initializeApp().then(() => {
+  app.listen(PORT, () => {
+      console.log(`🚀 Server listening on port ${PORT}`);
+      console.log(`React App accessible at http://localhost:${PORT}`);
+  });
+}).catch(err => {
+   console.error("Server failed to start due to initialization errors.", err);
 });
