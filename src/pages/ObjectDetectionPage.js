@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import '../App.css';
 
-const MODEL_TABS = ['vision', 'vertex', 'gemini'];
+const MODEL_TABS = [
+  'vision', 
+  'vertex', 
+  'gemini'];
 
 function ObjectDetectionPage() {
   const [image, setImage] = useState(null);
@@ -34,7 +37,7 @@ function ObjectDetectionPage() {
 
       if (uploadRes.data?.base64Image) {
         setBase64Image(uploadRes.data.base64Image);
-        setimageURL(uploadRes.data.imageUrl); // Save the image URL for later use
+        setimageURL(uploadRes.data.imageUrl); 
       } else {
         alert('Image upload failed or base64 data missing.');
       }

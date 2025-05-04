@@ -5,11 +5,12 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const { google } = require('googleapis');
+const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 const { PredictionServiceClient } = require('@google-cloud/aiplatform').v1;
 const { Value } = require('google-protobuf/google/protobuf/struct_pb');
 const { GoogleGenerativeAI} = require('@google/generative-ai');
 const path = require('path');
-const PORT = process.env.PORT || 8080;
+const PORT = 8080;
 const admin = require('firebase-admin');
 const Busboy = require('busboy');
 const os = require('os');
@@ -18,20 +19,34 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 
-const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+// const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
 // admin.initializeApp({
 //    credential: admin.credential.cert(serviceAccount),
 //    storageBucket: 'test_img_upload_acs',  // This is your Firebase storage bucket
 // });
 
-// admin.initializeApp({
-//   credential: admin.credential.applicationDefault(),
-//   storageBucket: 'test_img_upload_acs',  // Your Firebase Storage bucket name
-// });
+
+// Create a new client
+const client = new SecretManagerServiceClient();
+
+async function accessSecret(secretName) {
+  const name = `projects/YOUR_PROJECT_ID/secrets/${secretName}/versions/latest`;
+
+  try {
+    const [version] = await client.accessSecretVersion({ name });
+    const payload = version.payload.data.toString('utf8');
+    console.log(`Retrieved secret: ${payload}`);
+    return payload;
+  } catch (error) {
+    console.error('Error accessing secret:', error);
+    throw error;
+  }
+}
+
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
-  storageBucket: process.env.GCS_BUCKET_NAME,  // Your Firebase Storage bucket name
+  storageBucket: accessSecret('GCS_BUCKET_NAME'), 
 });
 
 
@@ -41,13 +56,14 @@ const imagesearchRef = db.collection('imagesearch');
 
 async function getAccessToken() {
     const auth = new google.auth.GoogleAuth({
-        keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        // keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     });
     const authClient = await auth.getClient();
     const accessToken = await authClient.getAccessToken();
     return accessToken.token;
 }
+
 
 
 
@@ -75,13 +91,12 @@ app.post('/api/upload', (req, res) => {
       console.log('File uploaded to Cloud Storage:', filePath);
       const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
 
-            // Now, process the image with Google Vision API
             try {
-
-              const [fileBuffer] = await bucket.file(filePath).download();  // ✅ Download from cloud
+              // Download from cloud
+              const [fileBuffer] = await bucket.file(filePath).download();
               const base64Image = fileBuffer.toString('base64');
               
-              // Respond with both base64 image and the URL
+              // Response: base64 image and the URL
               res.json({ base64Image, imageUrl });
                 } 
             catch (err) {
@@ -110,7 +125,7 @@ app.post('/api/detect-vision', async (req, res) => {
           return res.status(400).json({ error: 'Base64 image is required' });
         }
         
-        // Prepare the request payload for Google Vision API
+        // Request payload for Google Vision API
         const requestPayload = {
             requests: [
                 {
@@ -137,9 +152,6 @@ app.post('/api/detect-vision', async (req, res) => {
             },
         });
         
-        // Print the full response JSON in the terminal
-        //console.log('Full JSON response from Vision API:', JSON.stringify(response.data, null, 2));
-        
         // Process and send back the detected objects
         const objects = response.data.responses[0].localizedObjectAnnotations.map(obj => ({
             name: obj.name,
@@ -148,7 +160,7 @@ app.post('/api/detect-vision', async (req, res) => {
         }));
         
         //fs.unlinkSync(filePath); // Clean up the uploaded file
-        res.json(objects); // Send the result back to the client
+        res.json(objects); // Send response
     } catch (err) {
         console.error('Error during image processing:', err);
         res.status(500).json({ error: 'Detection failed', message: err.message });
@@ -158,9 +170,9 @@ app.post('/api/detect-vision', async (req, res) => {
 
 // Vertex AI detection (AutoML Image Object Detection focus)
 
-const projectId = process.env.VERTEX_PROJECT_ID;
-const endpointId = process.env.VERTEX_ENDPOINT_ID;
-const location = process.env.VERTEX_LOCATION || 'us-central1';
+const projectId = accessSecret('VERTEX_PROJECT_ID');
+const endpointId = accessSecret('VERTEX_ENDPOINT_ID');
+const location = accessSecret('VERTEX_LOCATION') || 'us-central1';
 
 const confidenceThreshold = 0.5;
 const maxPredictions = 10;
@@ -280,7 +292,7 @@ app.post('/api/detect-vertex',  async (req, res) => {
 
 
 // Gemini API - Multimodal Image + Prompt
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(accessSecret('GEMINI_API_KEY'));
 
 app.post('/api/detect-gemini',  async (req, res) => {
 
@@ -382,14 +394,6 @@ Respond with JSON in the following structure:
 });
 
 
-
-// if (require.main === module) {
-//     const PORT = process.env.PORT || 3001;
-//     app.listen(PORT, () => {
-//         console.log(`Server listening on port ${PORT}`);
-//     });
-// }
-
 // Video Intelligence detection
 
 const { VideoIntelligenceServiceClient } = require('@google-cloud/video-intelligence');
@@ -457,7 +461,6 @@ app.post('/api/save-to-firestore', async (req, res) => {
   const { imageUrl, results } = req.body;
 
   try {
-    // Use add() to automatically create a new document with a unique ID
     await imagesearchRef.add({
       imageUrl: imageUrl,
       results: {
