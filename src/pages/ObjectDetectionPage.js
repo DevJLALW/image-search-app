@@ -4,7 +4,7 @@ import '../App.css';
 
 const MODEL_TABS = [
   'vision', 
-  // 'vertex', 
+  'vertex', 
   'gemini'];
 
 function ObjectDetectionPage() {
@@ -55,7 +55,7 @@ function ObjectDetectionPage() {
 
     const endpoints = {
       vision: '/api/detect-vision',
-      // vertex: '/api/detect-vertex',
+      vertex: '/api/detect-vertex',
       gemini: '/api/detect-gemini',
     };
 
