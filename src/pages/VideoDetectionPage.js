@@ -51,24 +51,36 @@ import React, { useState } from 'react';
            <video src={videoPreview} controls width="400" />
          </div>
        )}
- 
+
        {results.length > 0 && (
-         <div>
-           <h3>Detected Labels:</h3>
-           <ul>
-             {results.map((item, index) => (
-               <li key={index}>
-                 <strong>{item.description}</strong> - Categories: {item.categoryDescriptions.join(', ')}
-                 <ul>
-                   {item.segments.map((seg, i) => (
-                     <li key={i}>
-                       From {seg.startTime}s to {seg.endTime}s (Confidence: {seg.confidence.toFixed(2)})
-                     </li>
-                   ))}
-                 </ul>
-               </li>
-             ))}
-           </ul>
+         <div style={{ marginTop: '2rem' }}>
+           <h3>Detected Objects</h3>
+           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+             <thead>
+               <tr style={{ backgroundColor: '#f2f2f2' }}>
+                 <th style={{ border: '1px solid #ccc', padding: '8px' }}>Object</th>
+                 <th style={{ border: '1px solid #ccc', padding: '8px' }}>Category</th>
+                 <th style={{ border: '1px solid #ccc', padding: '8px' }}>Timestamp</th>
+                 <th style={{ border: '1px solid #ccc', padding: '8px' }}>Confidence</th>
+               </tr>
+             </thead>
+             <tbody>
+               {results.map((item, index) =>
+                 item.segments.map((seg, i) => (
+                   <tr key={`${index}-${i}`}>
+                     <td style={{ border: '1px solid #ccc', padding: '8px' }}>{item.description}</td>
+                     <td style={{ border: '1px solid #ccc', padding: '8px' }}>{item.categoryDescriptions.join(', ')}</td>
+                     <td style={{ border: '1px solid #ccc', padding: '8px' }}>
+                       {seg.startTime}s – {seg.endTime}s
+                     </td>
+                     <td style={{ border: '1px solid #ccc', padding: '8px' }}>
+                       {seg.confidence.toFixed(2)}
+                     </td>
+                   </tr>
+                 ))
+               )}
+             </tbody>
+           </table>
          </div>
        )}
      </div>

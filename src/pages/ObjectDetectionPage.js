@@ -4,7 +4,7 @@ import '../App.css';
 
 const MODEL_TABS = [
   'vision', 
-  'vertex', 
+  // 'vertex', 
   'gemini'];
 
 function ObjectDetectionPage() {
@@ -55,7 +55,7 @@ function ObjectDetectionPage() {
 
     const endpoints = {
       vision: '/api/detect-vision',
-      vertex: '/api/detect-vertex',
+      // vertex: '/api/detect-vertex',
       gemini: '/api/detect-gemini',
     };
 
@@ -119,26 +119,30 @@ function ObjectDetectionPage() {
     );
   };
 
-  const renderTabContent = () => {
-    const objects = results[selectedModel];
-    return (
-      <div style={{ textAlign: 'center' }}>
-        {renderBoxes(objects)}
-        {objects && objects.length > 0 && (
-          <div style={{ textAlign: 'left', marginTop: '1rem', maxWidth: '600px', margin: '1rem auto' }}>
-            <h4>Detected Objects:</h4>
-            <ul>
-              {objects.map((obj, idx) => (
-                <li key={idx}>
-                  <strong>{obj.name}</strong> – Confidence:{' '}
-                  {(obj.score * 100).toFixed(1)}%
-                </li>
-              ))}
-            </ul>
+  const renderBoundingBoxes = (objects) => {
+    return objects.map((obj, idx) => {
+      const x = obj.boundingPoly[0].x * 100;
+      const y = obj.boundingPoly[0].y * 100;
+      const width = (obj.boundingPoly[1].x - obj.boundingPoly[0].x) * 100;
+      const height = (obj.boundingPoly[2].y - obj.boundingPoly[0].y) * 100;
+
+      return (
+        <div
+          key={idx}
+          className="bounding-box"
+          style={{
+            left: `${x}%`,
+            top: `${y}%`,
+            width: `${width}%`,
+            height: `${height}%`,
+          }}
+        >
+          <div className="label">
+            {obj.name} ({(obj.score * 100).toFixed(1)}%)
           </div>
-        )}
-      </div>
-    );
+        </div>
+      );
+    });
   };
 
   return (
@@ -159,26 +163,31 @@ function ObjectDetectionPage() {
       )}
 
       {Object.keys(results).length > 0 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            {MODEL_TABS.map((model) => (
-              <button
-                key={model}
-                onClick={() => setSelectedModel(model)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: selectedModel === model ? '#007bff' : '#e0e0e0',
-                  color: selectedModel === model ? 'white' : 'black',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                {model.charAt(0).toUpperCase() + model.slice(1)}
-              </button>
-            ))}
-          </div>
-          {renderTabContent()}
+        <div className="results-container">
+          {MODEL_TABS.map((model) => {
+            const objects = results[model];
+            return (
+              <div key={model} className="result-box">
+                <h3>{model.charAt(0).toUpperCase() + model.slice(1)}</h3>
+                <div className="image-container">
+                  <img src={preview} alt={`Detected - ${model}`} className="overlay-image" />
+                  {objects && renderBoundingBoxes(objects)}
+                </div>
+                {objects && objects.length > 0 && (
+                  <div style={{ marginTop: '1rem', textAlign: 'left' }}>
+                    <h4>Detected Objects:</h4>
+                    <ul>
+                      {objects.map((obj, idx) => (
+                        <li key={idx}>
+                          <strong>{obj.name}</strong> – Confidence: {(obj.score * 100).toFixed(1)}%
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
