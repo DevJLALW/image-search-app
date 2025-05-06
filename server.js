@@ -545,32 +545,45 @@ app.post('/api/save-to-firestore', async (req, res) => {
   }
 });
 
-async function getImageUrlsByTag(tag) {
-  const snapshot = await db.collection("imagesearch").get();
-  const matchedUrls = [];
 
-  snapshot.forEach((doc) => {
+async function getImageUrlsByTag(tag) {
+  const tagLower = tag.toLowerCase();
+  const snapshot = await db.collection('imagesearch').get(); // Adjust the collection name if needed
+
+  const matchedImages = [];
+
+  snapshot.forEach(doc => {
     const data = doc.data();
     const { imageUrl, results } = data;
 
-    const allResults = [
-      ...(results?.gemini || []),
-      ...(results?.vertex || []),
-      ...(results?.vision || []),
-    ];
+    if (!imageUrl || !results) return;
 
-    const tagFound = allResults.some(
-      (entry) => entry.name?.toLowerCase() === tag.toLowerCase()
-    );
+    const scores = [];
 
-    if (tagFound && imageUrl) {
-      matchedUrls.push(imageUrl);
+    for (const source in results) {
+      const sourceResults = results[source];
+      if (Array.isArray(sourceResults)) {
+        sourceResults.forEach(({ name, score }) => {
+          if (name && name.toLowerCase() === tagLower && typeof score === 'number') {
+            scores.push(score);
+          }
+        });
+      }
+    }
+    
+    if (scores.length > 0) {
+      matchedImages.push({
+        imageUrl,
+        maxScore: Math.max(...scores)
+      });
     }
   });
-
-  console.log(matchedUrls);
-  return matchedUrls;
+  
+  return matchedImages
+    .sort((a, b) => b.maxScore - a.maxScore)
+    .map(img => img.imageUrl);
 }
+
 
 async function fetchImagesFromUrls(urls) {
   const results = [];
