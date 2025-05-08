@@ -30,7 +30,8 @@ app.use(express.json({ limit: '10mb' }));
 const client = new SecretManagerServiceClient();
 
 async function accessSecret(secretName) {
-  const name = `projects/629889543689/secrets/${secretName}/versions/latest`;
+  const projectId = process.env.PROJECT_ID;
+  const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
 
   try {
     const [version] = await client.accessSecretVersion({ name });
@@ -44,6 +45,7 @@ async function accessSecret(secretName) {
 
 
 let GCS_BUCKET_NAME, VERTEX_PROJECT_ID, VERTEX_ENDPOINT_ID, VERTEX_LOCATION, GEMINI_API_KEY;
+let bucket, db, imagesearchRef;
 
 // admin.initializeApp({
 //   credential: admin.credential.applicationDefault(),
