@@ -53,7 +53,7 @@ Before running the app, make sure to set up the following:
    - `VERTEX_LOCATION` (e.g., `us-central1`)
    - `GEMINI_API_KEY`
 
-8. 📄 Update PROJECT_ID in [app.yaml] as your GCP project number
+8. 📄 Update PROJECT_ID in [app.yaml](./app.yaml) as your GCP project number
 
 9. 🔥 Create Firestore database (used to store image metadata and search results)
    -  Create a default database in GCP Firestore: Ensure it is set up with a native structure.
